@@ -17,9 +17,19 @@ class FormField(metaclass=abc.ABCMeta):
     def default(self):
         return self._default
 
-    # @abc.abstractmethod
+    @abc.abstractmethod
     def validate(self, value):
         pass
+
+    @classmethod
+    @abc.abstractmethod
+    def from_json(cls, json):
+        pass
+
+    @staticmethod
+    def build_field(json):
+        cls = _type_map[json['type']]
+        return cls.from_json(json)
 
 
 class IntField(FormField):
@@ -48,6 +58,20 @@ class IntField(FormField):
         if self.min is not None and value < self.min:
             raise ValidationError(self, 'min', 'Value is too small')
         return value
+
+
+    @classmethod
+    def from_json(cls, json):
+        constraints = {
+            item['name']: item['value']
+            for item in json['constraints']
+        }
+        return IntField(
+            required=json['required'],
+            default=json['default'],
+            min=constraints.get('min'),
+            max=constraints.get('max')
+        )
 
 
 class FloatField(FormField):
@@ -95,6 +119,21 @@ class FloatField(FormField):
                 raise ValidationError(self, 'min', '%f <= %f' % (value, self._min))
         return value
 
+    @classmethod
+    def from_json(cls, json):
+        constraints = {
+            item['name']: item['value']
+            for item in json['constraints']
+        }
+        return FloatField(
+            required=json['required'],
+            default=json['default'],
+            min=constraints.get('min'),
+            max=constraints.get('max'),
+            min_exclusive=constraints.get('minExclusive', False),
+            max_exclusive=constraints.get('maxExclusive', False)
+        )
+
 
 class TextField(FormField):
     def __init__(self, required: bool, default: str,
@@ -124,6 +163,19 @@ class TextField(FormField):
             raise ValidationError(self, 'min_length', 'String is too short')
         return value
 
+    @classmethod
+    def from_json(cls, json):
+        constraints = {
+            item['name']: item['value']
+            for item in json['constraints']
+        }
+        return TextField(
+            required=json['required'],
+            default=json['default'],
+            min_length=constraints.get('minLength'),
+            max_length=constraints.get('maxLength')
+        )
+
 
 class BooleanField(FormField):
     def __init__(self, required: bool, default: bool):
@@ -137,6 +189,13 @@ class BooleanField(FormField):
         if not isinstance(value, bool):
             raise ValidationError(self, 'value', '"%s" is not a boolean' % repr(value))
         return value
+
+    @classmethod
+    def from_json(cls, json):
+        return BooleanField(
+            required=json['required'],
+            default=json['default'],
+        )
 
 
 class ChoiceField(FormField):
@@ -155,6 +214,18 @@ class ChoiceField(FormField):
             raise ValidationError(self, 'required', 'Field is required')
         if value not in self._choices:
             raise ValidationError(self, 'choice', 'Invalid choice "%s"' % value)
+
+    @classmethod
+    def from_json(cls, json):
+        constraints = {
+            item['name']: item['value']
+            for item in json['constraints']
+        }
+        return ChoiceField(
+            required=json['required'],
+            default=json['default'],
+            choices=json['choices']
+        )
 
 
 class FileField(FormField):
@@ -185,6 +256,21 @@ class FileField(FormField):
         if not isinstance(value, slivka_client.FileHandler):
             raise ValidationError(self, 'value', 'Not a FileHandler')
         return value
+
+
+    @classmethod
+    def from_json(cls, json):
+        constraints = {
+            item['name']: item['value']
+            for item in json['constraints']
+        }
+        return FileField(
+            required=json['required'],
+            default=json['default'],
+            mimetype=constraints.get('mimetype'),
+            extension=constraints.get('extension'),
+            max_size=constraints.get('maxSize')
+        )
 
 
 class ValidationError(Exception):
