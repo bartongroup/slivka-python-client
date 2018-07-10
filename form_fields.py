@@ -32,7 +32,7 @@ class FormField(metaclass=abc.ABCMeta):
         return cls.from_json(json)
 
 
-class IntField(FormField):
+class IntegerField(FormField):
     def __init__(self, required, default, min, max):
         super().__init__(required, default)
         self._min = min
@@ -59,14 +59,13 @@ class IntField(FormField):
             raise ValidationError(self, 'min', 'Value is too small')
         return value
 
-
     @classmethod
     def from_json(cls, json):
         constraints = {
             item['name']: item['value']
             for item in json['constraints']
         }
-        return IntField(
+        return IntegerField(
             required=json['required'],
             default=json['default'],
             min=constraints.get('min'),
@@ -74,7 +73,7 @@ class IntField(FormField):
         )
 
 
-class FloatField(FormField):
+class DecimalField(FormField):
     def __init__(self, required: bool, default: float,
                  min: float, min_exclusive: bool,
                  max: float, max_exclusive: bool):
@@ -125,7 +124,7 @@ class FloatField(FormField):
             item['name']: item['value']
             for item in json['constraints']
         }
-        return FloatField(
+        return DecimalField(
             required=json['required'],
             default=json['default'],
             min=constraints.get('min'),
@@ -224,7 +223,7 @@ class ChoiceField(FormField):
         return ChoiceField(
             required=json['required'],
             default=json['default'],
-            choices=json['choices']
+            choices=constraints['choices']
         )
 
 
@@ -255,8 +254,7 @@ class FileField(FormField):
             raise ValidationError(self, 'required', 'Field is required')
         if not isinstance(value, slivka_client.FileHandler):
             raise ValidationError(self, 'value', 'Not a FileHandler')
-        return value
-
+        return value.id
 
     @classmethod
     def from_json(cls, json):
@@ -281,8 +279,8 @@ class ValidationError(Exception):
 
 
 _type_map = {
-    'int': IntField,
-    'float': FloatField,
+    'integer': IntegerField,
+    'float': DecimalField,
     'choice': ChoiceField,
     'text': TextField,
     'boolean': BooleanField,

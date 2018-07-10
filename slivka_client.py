@@ -106,6 +106,8 @@ class Form:
         self._fields = fields
         self._submit_uri = submit_uri
         self._host = host
+        self._template = True
+        self._values = {}
 
     @property
     def name(self) -> str:
@@ -128,62 +130,53 @@ class Form:
         return Form(
             name=json['form'],
             fields={
-                field['name']: None
+                field['name']: FormField.build_field(field)
                 for field in json['fields']
             },
             submit_uri=json['submitURI'],
             host=host
         )
 
-    def init(self) -> 'FormProxy':
-        return FormProxy(self)
+    def _clone(self) -> 'Form':
+        form = Form(self._name, self._fields, self._submit_uri, self._host)
+        form._template = False
+        return form
 
-    def insert(self, items: dict = None, **kwargs) -> 'FormProxy':
-        return FormProxy(self).insert(items, **kwargs)
-
-    def __repr__(self):
-        return '<%s>' % self.name
-
-
-class FormProxy:
-    def __init__(self, form: Form):
-        self._values = {}
-        self._form = form
-
-    @property
-    def fields(self) -> Dict[str, FormField]:
-        return self._form.fields
-
-    def insert(self, items: dict = None, **kwargs) -> 'FormProxy':
+    def insert(self, items: dict = None, **kwargs) -> 'Form':
+        form = self._clone() if self._template else self
         items = items or {}
         items.update(kwargs)
         for name, value in items.items():
-            if name not in self._form.fields.keys():
+            if name not in form.fields.keys():
                 raise KeyError('Invalid field "%s"' % name)
-            self._values[name] = value
-        return self
+            form._values[name] = value
+        return form
 
-    def validate(self):
+    def validate(self) -> Dict[str, str]:
         errors = []
-        for name, field in self._form.fields.items():
+        cleaned_values = {}
+        for name, field in self.fields.items():
             try:
-                self._values[name] = field.validate(self._values[name])
+                cleaned_values[name] = field.validate(self._values.get(name))
             except ValidationError as e:
                 errors.append(e)
         if errors:
             raise FormValidationError(errors)
+        else:
+            return cleaned_values
 
     def submit(self) -> 'TaskHandler':
-        response = _session.post(self._form.submit_url, data=self._values)
+        cleaned_values = self.validate()
+        response = _session.post(self.submit_url, data=cleaned_values)
         if response.status_code == 202:
             return TaskHandler(task_id=response.json()['taskId'],
                                status_uri=response.json()['checkStatusURI'],
-                               host=self._form.host)
+                               host=self.host)
         else:
             raise HTTPException.from_response(response)
 
     def __repr__(self):
-        return '<%sProxy>' % self._form.name
+        return '<%s>' % self.name
 
 
 class FileHandler:
