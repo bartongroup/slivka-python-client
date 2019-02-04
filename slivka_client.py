@@ -34,15 +34,15 @@ class SlivkaClient:
 
     def upload_file(self,
                     file: Union[str, io.BufferedIOBase],
-                    title: str) -> 'FileHandler':
+                    title: str,
+                    mimetype: str = 'text/plain') -> 'FileHandler':
         if isinstance(file, str):
             file = open(file, 'rb')
         elif not isinstance(file, io.BufferedIOBase):
             raise TypeError('"%s" is not valid path or stream' % repr(type(file)))
         response = _session.post(
             url=self._host + '/file',
-            data={'mimetype': 'text/plain'},
-            files={'file': (title, file)}
+            files={'file': (title, file, mimetype)}
         )
         if response.status_code == 201:
             json = response.json()

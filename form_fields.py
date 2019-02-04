@@ -280,7 +280,7 @@ class ValidationError(Exception):
 
 _type_map = {
     'integer': IntegerField,
-    'float': DecimalField,
+    'decimal': DecimalField,
     'choice': ChoiceField,
     'text': TextField,
     'boolean': BooleanField,
