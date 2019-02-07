@@ -1,5 +1,6 @@
 import abc
 import io
+import json
 import re
 import threading
 from typing import Dict, Callable, List, Union, Any
@@ -45,12 +46,12 @@ class SlivkaClient:
             files={'file': (title, file, mimetype)}
         )
         if response.status_code == 201:
-            json = response.json()
+            jobj = response.json()
             return FileHandler(
-                file_id=json['id'],
-                title=json['title'],
-                mimetype=json['mimetype'],
-                download_url=self._host + json['downloadURI']
+                file_id=jobj['id'],
+                title=jobj['title'],
+                mimetype=jobj['mimetype'],
+                download_url=self._host + jobj['downloadURI']
             )
         else:
             raise HTTPException.from_response(response)
@@ -58,12 +59,12 @@ class SlivkaClient:
     def get_file(self, file_id: str) -> 'FileHandler':
         response = _session.get(self._host + '/file/%s' % file_id)
         if response.status_code == 200:
-            json = response.json()
+            jobj = response.json()
             return FileHandler(
-                file_id=json['id'],
-                title=json['title'],
-                mimetype=json['mimetype'],
-                download_url=self._host + json['downloadURI']
+                file_id=jobj['id'],
+                title=jobj['title'],
+                mimetype=jobj['mimetype'],
+                download_url=self._host + jobj['downloadURI']
             )
         else:
             raise HTTPException.from_response(response)
@@ -126,14 +127,14 @@ class Form:
         return self._host + self._submit_uri
 
     @staticmethod
-    def from_json(json, host: str) -> 'Form':
+    def from_json(jobj, host: str) -> 'Form':
         return Form(
-            name=json['form'],
+            name=jobj['form'],
             fields={
                 field['name']: FormField.build_field(field)
-                for field in json['fields']
+                for field in jobj['fields']
             },
-            submit_uri=json['submitURI'],
+            submit_uri=jobj['submitURI'],
             host=host
         )
 
@@ -251,6 +252,18 @@ class TaskHandler:
         else:
             raise HTTPException.from_response(response)
 
+    def dump(self, fp):
+        json.dump(
+            {"task_id": self._task_id,
+             "status_uri": self._status_uri,
+             "host": self._host},
+            fp
+        )
+
+    @classmethod
+    def load(cls, fp):
+        return cls(**json.load(fp))
+
     def result(self) -> List[FileHandler]:
         status = self.status()
         if not status.ready:
@@ -307,6 +320,8 @@ class TaskHandler:
             return self._interrupt_event.wait(timeout)
 
 
+# --- Exceptions --- #
+
 class HTTPException(Exception):
     def __init__(self, status: int, description: str, content: str):
         self.status = status
@@ -322,8 +337,6 @@ class HTTPException(Exception):
             content=response.text
         )
 
-
-# --- Exceptions --- #
 
 class ValidationError(Exception):
     def __init__(self, field, code, message):
@@ -365,13 +378,13 @@ class FormField(metaclass=abc.ABCMeta):
 
     @classmethod
     @abc.abstractmethod
-    def from_json(cls, json):
+    def from_json(cls, jobj):
         pass
 
     @classmethod
-    def build_field(cls, json):
-        klass = cls._type_map[json['type']]
-        return klass.from_json(json)
+    def build_field(cls, jobj):
+        klass = cls._type_map[jobj['type']]
+        return klass.from_json(jobj)
 
 
 class IntegerField(FormField):
@@ -402,14 +415,14 @@ class IntegerField(FormField):
         return value
 
     @classmethod
-    def from_json(cls, json):
+    def from_json(cls, jobj):
         constraints = {
             item['name']: item['value']
-            for item in json['constraints']
+            for item in jobj['constraints']
         }
         return IntegerField(
-            required=json['required'],
-            default=json['default'],
+            required=jobj['required'],
+            default=jobj['default'],
             min=constraints.get('min'),
             max=constraints.get('max')
         )
@@ -461,14 +474,14 @@ class DecimalField(FormField):
         return value
 
     @classmethod
-    def from_json(cls, json):
+    def from_json(cls, jobj):
         constraints = {
             item['name']: item['value']
-            for item in json['constraints']
+            for item in jobj['constraints']
         }
         return DecimalField(
-            required=json['required'],
-            default=json['default'],
+            required=jobj['required'],
+            default=jobj['default'],
             min=constraints.get('min'),
             max=constraints.get('max'),
             min_exclusive=constraints.get('minExclusive', False),
@@ -505,14 +518,14 @@ class TextField(FormField):
         return value
 
     @classmethod
-    def from_json(cls, json):
+    def from_json(cls, jobj):
         constraints = {
             item['name']: item['value']
-            for item in json['constraints']
+            for item in jobj['constraints']
         }
         return TextField(
-            required=json['required'],
-            default=json['default'],
+            required=jobj['required'],
+            default=jobj['default'],
             min_length=constraints.get('minLength'),
             max_length=constraints.get('maxLength')
         )
@@ -532,10 +545,10 @@ class BooleanField(FormField):
         return value
 
     @classmethod
-    def from_json(cls, json):
+    def from_json(cls, jobj):
         return BooleanField(
-            required=json['required'],
-            default=json['default'],
+            required=jobj['required'],
+            default=jobj['default'],
         )
 
 
@@ -557,14 +570,14 @@ class ChoiceField(FormField):
             raise ValidationError(self, 'choice', 'Invalid choice "%s"' % value)
 
     @classmethod
-    def from_json(cls, json):
+    def from_json(cls, jobj):
         constraints = {
             item['name']: item['value']
-            for item in json['constraints']
+            for item in jobj['constraints']
         }
         return ChoiceField(
-            required=json['required'],
-            default=json['default'],
+            required=jobj['required'],
+            default=jobj['default'],
             choices=constraints['choices']
         )
 
@@ -599,14 +612,14 @@ class FileField(FormField):
         return value.id
 
     @classmethod
-    def from_json(cls, json):
+    def from_json(cls, jobj):
         constraints = {
             item['name']: item['value']
-            for item in json['constraints']
+            for item in jobj['constraints']
         }
         return FileField(
-            required=json['required'],
-            default=json['default'],
+            required=jobj['required'],
+            default=jobj['default'],
             mimetype=constraints.get('mimetype'),
             extension=constraints.get('extension'),
             max_size=constraints.get('maxSize')
