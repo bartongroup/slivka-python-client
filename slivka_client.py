@@ -5,6 +5,7 @@ import re
 import threading
 from typing import Dict, Callable, List, Union, Any
 from collections import namedtuple
+from warnings import warn
 
 import requests
 
@@ -267,7 +268,7 @@ class TaskHandler:
     def result(self) -> List[FileHandler]:
         status = self.status()
         if not status.ready:
-            raise ImproveYourPatience('Result is not ready yet')
+            warn("Job hasn't finished yet. Result may be incomplete.")
         response = _session.get(self._host + self.status().result_uri)
         if response.status_code == 200:
             return [
@@ -348,10 +349,6 @@ class ValidationError(Exception):
 class FormValidationError(Exception):
     def __init__(self, errors: List[ValidationError]):
         self.errors = errors
-
-
-class ImproveYourPatience(Exception):
-    pass
 
 
 # --- Form fields --- #
