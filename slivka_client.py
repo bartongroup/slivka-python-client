@@ -1,113 +1,148 @@
 import abc
 import io
-import json
-import re
 import threading
-from typing import Dict, Callable, List, Union, Any
-from collections import namedtuple
+import xml.etree.ElementTree as ElementTree
+from typing import Dict, List, Union, Any, Type, NamedTuple, Callable, Tuple
 from warnings import warn
 
 import requests
-
+import urllib3.util.url
+from urllib3.util import Url
 
 _session = requests.Session()
 
 
 class SlivkaClient:
-    def __init__(self, host: str, port: int):
-        if not re.match('https?://', host):
-            host = 'http://' + host
-        self._host = '{}:{}'.format(host.rstrip(' /'), port)
+    def __init__(self, host: str, port: int = 8000):
+        self._url = urllib3.util.url.Url(scheme='http', host=host, port=port)
         self._services = None
 
-    def services(self) -> List['Service']:
+    @property
+    def url(self) -> Url:
+        return self._url
+
+    def build_url(self, path) -> Url:
+        return urllib3.util.url.Url(
+            scheme=self._url.scheme,
+            host=self._url.host,
+            port=self._url.port,
+            path=path
+        )
+
+    def get_services(self) -> List['Service']:
         if self._services is None:
-            response = _session.get(self._host + '/services')
+            response = _session.get(self.build_url('/services'))
             if response.status_code == 200:
                 self._services = [
-                    Service(name=service['name'],
-                            form_uri=service['submitURI'],
-                            host=self._host)
+                    Service(name=service['name'], path=service['URI'], client=self)
                     for service in response.json()['services']
                 ]
             else:
                 raise HTTPException.from_response(response)
         return self._services
 
+    def get_service(self, service_name) -> 'Service':
+        return next(service for service in self.get_services()
+                    if service.name == service_name)
+
     def upload_file(self,
                     file: Union[str, io.BufferedIOBase],
                     title: str,
-                    mimetype: str = 'text/plain') -> 'FileHandler':
+                    mime_type: str = 'text/plain') -> 'RemoteFile':
         if isinstance(file, str):
             file = open(file, 'rb')
         elif not isinstance(file, io.BufferedIOBase):
             raise TypeError('"%s" is not valid path or stream' % repr(type(file)))
         response = _session.post(
-            url=self._host + '/file',
-            files={'file': (title, file, mimetype)}
+            url=self.build_url('/files'),
+            files={'file': (title, file, mime_type)}
         )
         if response.status_code == 201:
-            jobj = response.json()
-            return FileHandler(
-                file_id=jobj['id'],
-                title=jobj['title'],
-                mimetype=jobj['mimetype'],
-                download_url=self._host + jobj['downloadURI']
+            json_data = response.json()
+            return RemoteFile(
+                file_uuid=json_data['uuid'],
+                title=json_data['title'],
+                mime_type=json_data['mimetype'],
+                content_path=json_data['contentURI'],
+                client=self
             )
         else:
             raise HTTPException.from_response(response)
 
-    def get_file(self, file_id: str) -> 'FileHandler':
-        response = _session.get(self._host + '/file/%s' % file_id)
+    def get_remote_file(self, file_id: str) -> 'RemoteFile':
+        response = _session.get(self.build_url('/files/%s' % file_id))
         if response.status_code == 200:
-            jobj = response.json()
-            return FileHandler(
-                file_id=jobj['id'],
-                title=jobj['title'],
-                mimetype=jobj['mimetype'],
-                download_url=self._host + jobj['downloadURI']
+            json_data = response.json()
+            return RemoteFile(
+                file_uuid=json_data['uuid'],
+                title=json_data['title'],
+                mime_type=json_data['mimetype'],
+                content_path=json_data['contentURI'],
+                client=self
             )
         else:
             raise HTTPException.from_response(response)
+
+    def dump_tasks(self, tasks, fname) -> None:
+        root = ElementTree.Element('SlivkaClient')
+        ElementTree.SubElement(root, 'host').text = self._url.host
+        ElementTree.SubElement(root, 'port').text = str(self._url.port)
+        tasks_element = ElementTree.SubElement(root, 'tasks')
+        for task in tasks:
+            te = ElementTree.SubElement(tasks_element, 'Task')
+            ElementTree.SubElement(te, 'uuid').text = task.uuid
+            ElementTree.SubElement(te, 'path').text = task.url.path
+        ElementTree.ElementTree(root).write(fname, xml_declaration=True)
+
+    def load_tasks(self, fname) -> List['Task']:
+        tree = ElementTree.parse(fname)
+        host = tree.find('host').text
+        port = int(tree.find('port').text)
+        if not (self._url.host == host and self._url.port == port):
+            warn('Loaded tasks did not originate from this server.')
+        return [
+            Task(el.find('uuid').text, el.find('path'), self)
+            for el in tree.findall('tasks/Task')
+        ]
 
     def __repr__(self):
-        return '<SlivkaClient "%s">' % self._host
+        return '<SlivkaClient "%s">' % self.url
 
 
 class Service:
-    def __init__(self, name, form_uri, host):
+    def __init__(self, name, path, client: SlivkaClient):
         self._name = name
-        self._form_uri = form_uri
+        self._client = client
+        self._url = client.build_url(path)
         self._form = None
-        self._host = host
 
     @property
     def name(self) -> str:
         return self._name
 
     @property
-    def form_url(self) -> str:
-        return self._host + self._form_uri
+    def url(self) -> Url:
+        return self._url
 
-    def form(self) -> 'Form':
+    def get_form(self) -> 'Form':
         if self._form is None:
-            response = _session.get(self.form_url)
+            response = _session.get(self.url)
             if response.status_code == 200:
-                self._form = Form.from_json(response.json(), self._host)
+                self._form = Form.from_json(response.json(), self._client)
             else:
                 raise HTTPException.from_response(response)
-        return self._form
+        return self._form.copy()
 
     def __repr__(self):
         return '<Service %s>' % self.name
 
 
 class Form:
-    def __init__(self, name: str, fields: dict, submit_uri: str, host: str):
+    def __init__(self, name: str, fields: dict, path: str, client: SlivkaClient):
         self._name = name
         self._fields = fields
-        self._submit_uri = submit_uri
-        self._host = host
+        self._url = client.build_url(path)
+        self._client = client
         self._template = True
         self._values = {}
 
@@ -116,43 +151,36 @@ class Form:
         return self._name
 
     @property
+    def url(self) -> Url:
+        return self._url
+
+    @property
     def fields(self) -> Dict[str, 'FormField']:
         return self._fields
 
-    @property
-    def host(self) -> str:
-        return self._host
-
-    @property
-    def submit_url(self) -> str:
-        return self._host + self._submit_uri
-
-    @staticmethod
-    def from_json(jobj, host: str) -> 'Form':
-        return Form(
-            name=jobj['form'],
+    @classmethod
+    def from_json(cls: Type['Form'], json_data: dict, client: SlivkaClient) -> 'Form':
+        return cls(
+            name=json_data['name'],
             fields={
-                field['name']: FormField.build_field(field)
-                for field in jobj['fields']
+                field['name']: FormField.make_field(field)
+                for field in json_data['fields']
             },
-            submit_uri=jobj['submitURI'],
-            host=host
+            path=json_data['URI'],
+            client=client
         )
 
-    def _clone(self) -> 'Form':
-        form = Form(self._name, self._fields, self._submit_uri, self._host)
-        form._template = False
-        return form
+    def copy(self) -> 'Form':
+        return Form(self._name, self._fields, self._url.path, self._client)
 
     def insert(self, items: dict = None, **kwargs) -> 'Form':
-        form = self._clone() if self._template else self
-        items = items or {}
+        items = items.copy() if items else {}
         items.update(kwargs)
         for name, value in items.items():
-            if name not in form.fields.keys():
+            if name not in self.fields.keys():
                 raise KeyError('Invalid field "%s"' % name)
-            form._values[name] = value
-        return form
+            self._values[name] = value
+        return self
 
     def validate(self) -> Dict[str, str]:
         errors = []
@@ -161,91 +189,105 @@ class Form:
             try:
                 cleaned_values[name] = field.validate(self._values.get(name))
             except ValidationError as e:
-                errors.append(e)
+                errors.append((field, e))
         if errors:
             raise FormValidationError(errors)
         else:
             return cleaned_values
 
-    def submit(self) -> 'TaskHandler':
+    def submit(self) -> 'Task':
         cleaned_values = self.validate()
-        response = _session.post(self.submit_url, data=cleaned_values)
+        response = _session.post(self.url, data=cleaned_values)
         if response.status_code == 202:
-            return TaskHandler(task_id=response.json()['taskId'],
-                               status_uri=response.json()['checkStatusURI'],
-                               host=self.host)
+            json_data = response.json()
+            return Task(task_uuid=json_data['uuid'],
+                        path=json_data['URI'],
+                        client=self._client)
         else:
             raise HTTPException.from_response(response)
 
     def __repr__(self):
-        return '<%s>' % self.name
+        return '<%sForm>' % self.name
 
 
-class FileHandler:
+class RemoteFile:
     def __init__(self,
-                 file_id: str,
+                 file_uuid: str,
                  title: str,
-                 mimetype: str,
-                 download_url: str):
-        self._file_id = file_id
+                 mime_type: str,
+                 content_path: str,
+                 client: SlivkaClient):
+        self._file_uuid = file_uuid
         self._title = title
-        self._mimetype = mimetype
-        self._download_url = download_url
+        self._mime_type = mime_type
+        self._content_url = client.build_url(content_path)
+        self._client = client
 
     @property
-    def id(self) -> str:
-        return self._file_id
+    def uuid(self) -> str:
+        return self._file_uuid
 
     @property
     def title(self) -> str:
         return self._title
 
     @property
-    def mimetype(self) -> str:
-        return self._mimetype
+    def mime_type(self) -> str:
+        return self._mime_type
 
     @property
-    def download_url(self) -> str:
-        return self._download_url
+    def url(self) -> Url:
+        return self._content_url
 
-    def download(self) -> str:
-        response = _session.get(self.download_url)
+    def dump(self, fp) -> None:
+        response = _session.get(self._content_url)
         if response.status_code == 200:
-            return response.text
+            if isinstance(fp, str):
+                with open(fp, 'wb') as f:
+                    f.write(response.content)
+            elif isinstance(fp, io.TextIOBase):
+                fp.write(response.text)
+            elif isinstance(fp, (io.BufferedIOBase, io.RawIOBase)):
+                fp.write(response.content)
+            else:
+                raise TypeError
         else:
             raise HTTPException.from_response(response)
 
     def __repr__(self):
-        return '<File %s>' % self._file_id
+        return '<File %s>' % self._file_uuid
 
 
-class TaskHandler:
-    TaskStatus = namedtuple('Status', 'execution, ready, result_uri')
+class Task:
+    Status = NamedTuple(
+        'Status',
+        [('status', str), ('ready', bool), ('files_url', str)]
+    )
 
-    def __init__(self, task_id: str, status_uri: str, host: str):
-        self._task_id = task_id
-        self._status_uri = status_uri
-        self._host = host
-        self._observer = self.TaskObserver(self)
+    def __init__(self, task_uuid: str, path: str, client: SlivkaClient):
+        self._uuid = task_uuid
+        self._url = client.build_url(path)
+        self._client = client
         self._cached_status = None
 
     @property
-    def status_url(self) -> str:
-        return self._host + self._status_uri
+    def url(self) -> Url:
+        return self._url
 
     @property
-    def observer(self) -> 'TaskHandler.TaskObserver':
-        return self._observer
+    def uuid(self):
+        return self._uuid
 
-    def status(self) -> TaskStatus:
+    def get_status(self) -> Status:
         if self._cached_status is not None:
             return self._cached_status
-        response = _session.get(self.status_url)
+        response = _session.get(self.url)
         if response.status_code == 200:
-            status = self.TaskStatus(
-                execution=response.json()['execution'],
-                ready=response.json()['ready'],
-                result_uri=response.json()['resultURI']
+            json_data = response.json()
+            status = Task.Status(
+                status=json_data['status'],
+                ready=json_data['ready'],
+                files_url=self._client.build_url(json_data['filesURI'])
             )
             if status.ready:
                 self._cached_status = status
@@ -253,30 +295,19 @@ class TaskHandler:
         else:
             raise HTTPException.from_response(response)
 
-    def dump(self, fp):
-        json.dump(
-            {"task_id": self._task_id,
-             "status_uri": self._status_uri,
-             "host": self._host},
-            fp
-        )
-
-    @classmethod
-    def load(cls, fp):
-        return cls(**json.load(fp))
-
-    def result(self) -> List[FileHandler]:
-        status = self.status()
+    def get_files(self) -> List[RemoteFile]:
+        status = self.get_status()
         if not status.ready:
-            warn("Job hasn't finished yet. Result may be incomplete.")
-        response = _session.get(self._host + self.status().result_uri)
+            warn("Job hasn't finished yet. The result may be incomplete.")
+        response = _session.get(status.files_url)
         if response.status_code == 200:
             return [
-                FileHandler(
-                    file_id=file['id'],
+                RemoteFile(
+                    file_uuid=file['uuid'],
                     title=file['title'],
-                    mimetype=file['mimetype'],
-                    download_url=self._host + file['downloadURI']
+                    mime_type=file['mimetype'],
+                    content_path=file['contentURI'],
+                    client=self._client
                 )
                 for file in response.json()['files']
             ]
@@ -284,41 +315,44 @@ class TaskHandler:
             raise HTTPException.from_response(response)
 
     def __repr__(self):
-        return '<Task %s>' % self._task_id
+        return '<Task %s>' % self.uuid
 
-    class TaskObserver(threading.Thread):
-        def __init__(self, handler: 'TaskHandler'):
-            super().__init__()
-            self._handler = handler
-            self._listeners = set()
-            self._interrupt_event = threading.Event()
-            self._cached_status = None  # type: TaskHandler.TaskStatus
 
-        @property
-        def status(self) -> 'TaskHandler.TaskStatus':
-            if self._cached_status is None:
-                return self._handler.status()
-            else:
-                return self._cached_status
+class TaskWatcher(threading.Thread):
+    def __init__(self, task: Task):
+        super().__init__()
+        self._task = task
+        self._listeners = set()
+        self._interrupt_event = threading.Event()
 
-        def add_ready_listener(self, func: Callable[['TaskHandler'], None]):
-            self._listeners.add(func)
+    @property
+    def task(self):
+        return self._task
 
-        def run(self):
-            self._interrupt_event.clear()
-            while not self._interrupt_event.is_set():
-                self._cached_status = self._handler.status()
-                if self._cached_status.ready:
-                    self._interrupt_event.set()
-                self._interrupt_event.wait(0.5)
+    def get_status(self) -> Task.Status:
+        return self._task.get_status()
+
+    def add_completion_listener(self, func: Callable[[Task], None]):
+        self._listeners.add(func)
+
+    def run(self):
+        self._interrupt_event.clear()
+        while True:
+            status = self._task.get_status()
+            if status.ready:
+                self._interrupt_event.set()
+            self._interrupt_event.wait(1)
+            if self._interrupt_event.is_set():
+                break
+        if status.ready:
             for listener in self._listeners:
-                listener(self._handler)
+                listener(self._task)
 
-        def interrupt(self):
-            self._interrupt_event.set()
+    def interrupt(self):
+        self._interrupt_event.set()
 
-        def wait(self, timeout):
-            return self._interrupt_event.wait(timeout)
+    def wait(self, timeout):
+        return self._interrupt_event.wait(timeout)
 
 
 # --- Exceptions --- #
@@ -347,7 +381,7 @@ class ValidationError(Exception):
 
 
 class FormValidationError(Exception):
-    def __init__(self, errors: List[ValidationError]):
+    def __init__(self, errors: List[Tuple['FormField', ValidationError]]):
         self.errors = errors
 
 
@@ -375,13 +409,13 @@ class FormField(metaclass=abc.ABCMeta):
 
     @classmethod
     @abc.abstractmethod
-    def from_json(cls, jobj):
+    def from_json(cls, json_data):
         pass
 
     @classmethod
-    def build_field(cls, jobj):
-        klass = cls._type_map[jobj['type']]
-        return klass.from_json(jobj)
+    def make_field(cls, json_data):
+        field_class = cls._type_map[json_data['type']]
+        return field_class.from_json(json_data)
 
 
 class IntegerField(FormField):
@@ -412,16 +446,18 @@ class IntegerField(FormField):
         return value
 
     @classmethod
-    def from_json(cls, jobj):
-        constraints = {
-            item['name']: item['value']
-            for item in jobj['constraints']
-        }
+    def from_json(cls, json_data):
         return IntegerField(
-            required=jobj['required'],
-            default=jobj['default'],
-            min=constraints.get('min'),
-            max=constraints.get('max')
+            required=json_data['required'],
+            default=json_data['default'],
+            min=json_data.get('min'),
+            max=json_data.get('max')
+        )
+
+    def __repr__(self):
+        return (
+            "IntegerField(required={}, default={}, min={}, max={})"
+            .format(self.required, self.default, self.min, self.max)
         )
 
 
@@ -471,18 +507,21 @@ class DecimalField(FormField):
         return value
 
     @classmethod
-    def from_json(cls, jobj):
-        constraints = {
-            item['name']: item['value']
-            for item in jobj['constraints']
-        }
+    def from_json(cls, json_data):
         return DecimalField(
-            required=jobj['required'],
-            default=jobj['default'],
-            min=constraints.get('min'),
-            max=constraints.get('max'),
-            min_exclusive=constraints.get('minExclusive', False),
-            max_exclusive=constraints.get('maxExclusive', False)
+            required=json_data['required'],
+            default=json_data['default'],
+            min=json_data.get('min'),
+            max=json_data.get('max'),
+            min_exclusive=json_data.get('minExclusive', False),
+            max_exclusive=json_data.get('maxExclusive', False)
+        )
+
+    def __repr__(self):
+        return (
+            "DecimalField(required={}, default={}, min={}, max={}, min_exc={}, max_exc={})"
+            .format(self.required, self.default, self.min, self.max,
+                    self.min_exclusive, self.max_exclusive)
         )
 
 
@@ -515,16 +554,18 @@ class TextField(FormField):
         return value
 
     @classmethod
-    def from_json(cls, jobj):
-        constraints = {
-            item['name']: item['value']
-            for item in jobj['constraints']
-        }
+    def from_json(cls, json_data):
         return TextField(
-            required=jobj['required'],
-            default=jobj['default'],
-            min_length=constraints.get('minLength'),
-            max_length=constraints.get('maxLength')
+            required=json_data['required'],
+            default=json_data['default'],
+            min_length=json_data.get('minLength'),
+            max_length=json_data.get('maxLength')
+        )
+
+    def __repr__(self):
+        return (
+            "TextField(required={}, default={}, min_length={}, max_length={}"
+            .format(self.required, self.default, self.min_length, self.max_length)
         )
 
 
@@ -542,10 +583,16 @@ class BooleanField(FormField):
         return value
 
     @classmethod
-    def from_json(cls, jobj):
+    def from_json(cls, json_data):
         return BooleanField(
-            required=jobj['required'],
-            default=jobj['default'],
+            required=json_data['required'],
+            default=json_data['default'],
+        )
+
+    def __repr__(self):
+        return (
+            "BooleanField(required={}, default={}"
+            .format(self.required, self.default)
         )
 
 
@@ -567,23 +614,25 @@ class ChoiceField(FormField):
             raise ValidationError(self, 'choice', 'Invalid choice "%s"' % value)
 
     @classmethod
-    def from_json(cls, jobj):
-        constraints = {
-            item['name']: item['value']
-            for item in jobj['constraints']
-        }
+    def from_json(cls, json_data):
         return ChoiceField(
-            required=jobj['required'],
-            default=jobj['default'],
-            choices=constraints['choices']
+            required=json_data['required'],
+            default=json_data['default'],
+            choices=json_data['choices']
+        )
+
+    def __repr__(self):
+        return (
+            "ChoiceField(required={}, default={}, choices={}"
+            .format(self.required, self.default, self.choices)
         )
 
 
 class FileField(FormField):
     def __init__(self, required: bool, default: Any,
-                 mimetype: str, extension: str, max_size: int):
+                 mime_type: str, extension: str, max_size: int):
         super().__init__(required, default)
-        self._mimetype = mimetype
+        self._mime_type = mime_type
         self._extension = extension
         self._max_size = max_size
 
@@ -596,30 +645,32 @@ class FileField(FormField):
         return self._extension
 
     @property
-    def mimetype(self):
-        return self._mimetype
+    def mime_type(self):
+        return self._mime_type
 
     def validate(self, value):
         if value is None:
             value = self.default
         if value is None and self.required:
             raise ValidationError(self, 'required', 'Field is required')
-        if not isinstance(value, FileHandler):
-            raise ValidationError(self, 'value', 'Not a FileHandler')
-        return value.id
+        if not isinstance(value, RemoteFile):
+            raise ValidationError(self, 'value', 'Not a RemoteFile')
+        return value.uuid
 
     @classmethod
-    def from_json(cls, jobj):
-        constraints = {
-            item['name']: item['value']
-            for item in jobj['constraints']
-        }
+    def from_json(cls, json_data):
         return FileField(
-            required=jobj['required'],
-            default=jobj['default'],
-            mimetype=constraints.get('mimetype'),
-            extension=constraints.get('extension'),
-            max_size=constraints.get('maxSize')
+            required=json_data['required'],
+            default=json_data['default'],
+            mime_type=json_data.get('mimetype'),
+            extension=json_data.get('extension'),
+            max_size=json_data.get('maxSize')
+        )
+
+    def __repr__(self):
+        return (
+            "FileField(required={}, default={}, mime_type={}"
+            .format(self.required, self.default, self.mime_type)
         )
 
 
