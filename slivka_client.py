@@ -2,7 +2,7 @@ import abc
 import io
 import threading
 import xml.etree.ElementTree as ElementTree
-from typing import Dict, List, Union, Any, Type, NamedTuple, Callable, Tuple
+from typing import Dict, List, Union, Type, NamedTuple, Callable, Tuple
 from warnings import warn
 
 import requests
@@ -388,12 +388,13 @@ class FormValidationError(Exception):
 # --- Form fields --- #
 
 class FormField(metaclass=abc.ABCMeta):
-
     _type_map = {}
 
-    def __init__(self, required, default):
+    def __init__(self, required, default, label, description):
         self._required = required
         self._default = default
+        self._label = label
+        self._description = description
 
     @property
     def required(self):
@@ -402,6 +403,14 @@ class FormField(metaclass=abc.ABCMeta):
     @property
     def default(self):
         return self._default
+
+    @property
+    def label(self):
+        return self._label
+
+    @property
+    def description(self):
+        return self._description
 
     @abc.abstractmethod
     def validate(self, value):
@@ -419,8 +428,8 @@ class FormField(metaclass=abc.ABCMeta):
 
 
 class IntegerField(FormField):
-    def __init__(self, required, default, min, max):
-        super().__init__(required, default)
+    def __init__(self, required, default, label, description, min, max):
+        super().__init__(required, default, label, description)
         self._min = min
         self._max = max
 
@@ -450,6 +459,8 @@ class IntegerField(FormField):
         return IntegerField(
             required=json_data['required'],
             default=json_data['default'],
+            label=json_data['label'],
+            description=json_data['description'],
             min=json_data.get('min'),
             max=json_data.get('max')
         )
@@ -462,10 +473,9 @@ class IntegerField(FormField):
 
 
 class DecimalField(FormField):
-    def __init__(self, required: bool, default: float,
-                 min: float, min_exclusive: bool,
-                 max: float, max_exclusive: bool):
-        super().__init__(required, default)
+    def __init__(self, required, default, label, description,
+                 min, min_exclusive, max, max_exclusive):
+        super().__init__(required, default, label, description)
         self._min = min
         self._max = max
         self._min_exc = min_exclusive if min_exclusive is not None else False
@@ -511,6 +521,8 @@ class DecimalField(FormField):
         return DecimalField(
             required=json_data['required'],
             default=json_data['default'],
+            label=json_data['label'],
+            description=json_data['description'],
             min=json_data.get('min'),
             max=json_data.get('max'),
             min_exclusive=json_data.get('minExclusive', False),
@@ -526,9 +538,8 @@ class DecimalField(FormField):
 
 
 class TextField(FormField):
-    def __init__(self, required: bool, default: str,
-                 min_length: int, max_length: int):
-        super().__init__(required, default)
+    def __init__(self, required, default, label, description, min_length, max_length):
+        super().__init__(required, default, label, description)
         self._min_length = min_length
         self._max_length = max_length
 
@@ -558,6 +569,8 @@ class TextField(FormField):
         return TextField(
             required=json_data['required'],
             default=json_data['default'],
+            label=json_data['label'],
+            description=json_data['description'],
             min_length=json_data.get('minLength'),
             max_length=json_data.get('maxLength')
         )
@@ -570,8 +583,8 @@ class TextField(FormField):
 
 
 class BooleanField(FormField):
-    def __init__(self, required: bool, default: bool):
-        super().__init__(required, default)
+    def __init__(self, required, default, label, description):
+        super().__init__(required, default, label, description)
 
     def validate(self, value):
         if value is None:
@@ -587,6 +600,8 @@ class BooleanField(FormField):
         return BooleanField(
             required=json_data['required'],
             default=json_data['default'],
+            label=json_data['label'],
+            description=json_data['description'],
         )
 
     def __repr__(self):
@@ -597,8 +612,8 @@ class BooleanField(FormField):
 
 
 class ChoiceField(FormField):
-    def __init__(self, required: bool, default: str, choices: list):
-        super().__init__(required, default)
+    def __init__(self, required, default, label, description, choices):
+        super().__init__(required, default, label, description)
         self._choices = choices
 
     @property
@@ -618,6 +633,8 @@ class ChoiceField(FormField):
         return ChoiceField(
             required=json_data['required'],
             default=json_data['default'],
+            label=json_data['label'],
+            description=json_data['description'],
             choices=json_data['choices']
         )
 
@@ -629,9 +646,9 @@ class ChoiceField(FormField):
 
 
 class FileField(FormField):
-    def __init__(self, required: bool, default: Any,
-                 mime_type: str, extension: str, max_size: int):
-        super().__init__(required, default)
+    def __init__(self, required, default, label, description,
+                 mime_type, extension, max_size):
+        super().__init__(required, default, label, description)
         self._mime_type = mime_type
         self._extension = extension
         self._max_size = max_size
@@ -662,6 +679,8 @@ class FileField(FormField):
         return FileField(
             required=json_data['required'],
             default=json_data['default'],
+            label=json_data['label'],
+            description=json_data['description'],
             mime_type=json_data.get('mimetype'),
             extension=json_data.get('extension'),
             max_size=json_data.get('maxSize')
