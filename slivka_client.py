@@ -2,11 +2,10 @@ import abc
 import io
 import threading
 import xml.etree.ElementTree as ElementTree
-from typing import Dict, List, Union, Type, NamedTuple, Callable, Tuple
+from typing import Dict, List, Union, Type, NamedTuple, Callable, Tuple, Optional
 from warnings import warn
 
 import requests
-import urllib3.util.url
 from urllib3.util import Url
 
 _session = requests.Session()
@@ -14,7 +13,7 @@ _session = requests.Session()
 
 class SlivkaClient:
     def __init__(self, host: str, port: int = 8000):
-        self._url = urllib3.util.url.Url(scheme='http', host=host, port=port)
+        self._url = Url(scheme='http', host=host, port=port)
         self._services = None
 
     @property
@@ -22,7 +21,7 @@ class SlivkaClient:
         return self._url
 
     def build_url(self, path) -> Url:
-        return urllib3.util.url.Url(
+        return Url(
             scheme=self._url.scheme,
             host=self._url.host,
             port=self._url.port,
@@ -434,18 +433,20 @@ class IntegerField(FormField):
         self._max = max
 
     @property
-    def min(self) -> int:
+    def min(self) -> Optional[int]:
         return self._min
 
     @property
-    def max(self) -> int:
+    def max(self) -> Optional[int]:
         return self._max
 
     def validate(self, value):
+        value = self.default if value is None else value
         if value is None:
-            value = self.default
-        if value is None and self.required:
-            raise ValidationError(self, 'required', 'Field is required')
+            if self.required:
+                raise ValidationError(self, 'required', 'Field is required')
+            else:
+                return None
         if not isinstance(value, int):
             raise ValidationError(self, 'value', '"%s" is not an integer' % repr(value))
         if self.max is not None and value > self.max:
@@ -498,10 +499,12 @@ class DecimalField(FormField):
         return self._max_exc
 
     def validate(self, value):
+        value = self.default if value is None else value
         if value is None:
-            value = self.default
-        if value is None and self.required:
-            raise ValidationError(self, 'required', 'Field is required')
+            if self.required:
+                raise ValidationError(self, 'required', 'Field is required')
+            else:
+                return None
         if not isinstance(value, float):
             raise ValidationError(self, 'value', '"%s" is not a float' % repr(value))
         if self._max is not None:
@@ -552,10 +555,12 @@ class TextField(FormField):
         return self._max_length
 
     def validate(self, value):
+        value = self.default if value is None else value
         if value is None:
-            value = self.default
-        if value is None and self.required:
-            raise ValidationError(self, 'required', 'Field is required')
+            if self.required:
+                raise ValidationError(self, 'required', 'Field is required')
+            else:
+                return None
         if not isinstance(value, str):
             raise ValidationError(self, 'value', '"%s" is not a string' % repr(value))
         if self._max_length is not None and len(value) > self._max_length:
@@ -587,10 +592,12 @@ class BooleanField(FormField):
         super().__init__(required, default, label, description)
 
     def validate(self, value):
-        if value is None:
-            value = self.default
-        if (value is None or value is False) and self.required:
-            raise ValidationError(self, 'required', 'Field is required')
+        value = self.default if value is None else value
+        if value is None or value is False:
+            if self.required:
+                raise ValidationError(self, 'required', 'Field is required')
+            else:
+                return None
         if not isinstance(value, bool):
             raise ValidationError(self, 'value', '"%s" is not a boolean' % repr(value))
         return value
@@ -621,10 +628,12 @@ class ChoiceField(FormField):
         return self._choices
 
     def validate(self, value):
+        value = self.default if value is None else value
         if value is None:
-            value = self.default
-        if value is None and self.required:
-            raise ValidationError(self, 'required', 'Field is required')
+            if self.required:
+                raise ValidationError(self, 'required', 'Field is required')
+            else:
+                return None
         if value not in self._choices:
             raise ValidationError(self, 'choice', 'Invalid choice "%s"' % value)
 
@@ -666,10 +675,12 @@ class FileField(FormField):
         return self._mime_type
 
     def validate(self, value):
+        value = self.default if value is None else value
         if value is None:
-            value = self.default
-        if value is None and self.required:
-            raise ValidationError(self, 'required', 'Field is required')
+            if self.required:
+                raise ValidationError(self, 'required', 'Field is required')
+            else:
+                return None
         if not isinstance(value, RemoteFile):
             raise ValidationError(self, 'value', 'Not a RemoteFile')
         return value.uuid
