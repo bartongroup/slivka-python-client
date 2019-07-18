@@ -2,7 +2,7 @@ import abc
 import io
 import threading
 import xml.etree.ElementTree as ElementTree
-from typing import Dict, List, Union, Type, NamedTuple, Callable, Tuple, Optional
+from typing import Dict, List, Union, Type, NamedTuple, Callable, Optional
 from warnings import warn
 
 import requests

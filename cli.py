@@ -1,6 +1,7 @@
 import json
 import os
 import sys
+from fnmatch import fnmatch
 
 import click
 from click import ClickException
@@ -63,10 +64,10 @@ class ConfigLoader:
         return [(item['name'], item['uuid']) for item in self._json_data['tasks']]
 
     def get_task_by_name(self, name):
-        pass
-
-    def get_task_by_index(self, index):
-        pass
+        return [
+            (item['name'], item['uuid']) for item in self._json_data['tasks']
+            if fnmatch(item['name'], name)
+        ]
 
     def get_task_by_uuid(self, uuid):
         return next(
@@ -182,8 +183,9 @@ def service_submit(service, name, values):
 
 @click.command('task')
 @click.option('--all', '-a', 'show_all', is_flag=True)
-@click.option('--uuid', '-u', type=click.UUID)
-def task(show_all, uuid):
+@click.option('--name', '-n', 'task_name')
+@click.option('--uuid', '-u', 'task_uuid', type=click.UUID)
+def task(show_all, task_name, task_uuid):
     conf = ConfigLoader()
     try:
         cli = SlivkaClient(conf['host'], int(conf['port']))
@@ -191,12 +193,17 @@ def task(show_all, uuid):
         raise ClickException(
             "You must set \"{}\" in configuration.".format(e.args[0])
         )
-    if uuid:
-        name, uuid = conf.get_task_by_uuid(uuid.hex)
+    if task_name:
+        for name, uuid in conf.get_task_by_name(task_name):
+            task = cli.get_task(uuid)
+            status = task.get_status()
+            click.echo('{} [{}]: {}'.format(name, uuid, status.status))
+    elif task_uuid:
+        name, uuid = conf.get_task_by_uuid(task_uuid.hex)
         task = cli.get_task(uuid)
         status = task.get_status()
         click.echo('{} [{}]: {}'.format(name, uuid, status.status))
-    if show_all:
+    elif show_all:
         for name, uuid in conf.all_tasks():
             task = cli.get_task(uuid)
             status = task.get_status()
