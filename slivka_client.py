@@ -82,6 +82,14 @@ class SlivkaClient:
         else:
             raise HTTPException.from_response(response)
 
+    def get_task(self, uuid) -> 'Task':
+        url_path = '/tasks/%s' % uuid
+        response = _session.get(self.build_url(url_path))
+        if response.status_code == 200:
+            return Task(uuid, url_path, self)
+        else:
+            raise HTTPException.from_response(response)
+
     def dump_tasks(self, tasks, fname) -> None:
         root = ElementTree.Element('SlivkaClient')
         ElementTree.SubElement(root, 'host').text = self._url.host
@@ -249,7 +257,7 @@ class RemoteFile:
             elif isinstance(fp, (io.BufferedIOBase, io.RawIOBase)):
                 fp.write(response.content)
             else:
-                raise TypeError
+                raise TypeError(type(fp))
         else:
             raise HTTPException.from_response(response)
 
