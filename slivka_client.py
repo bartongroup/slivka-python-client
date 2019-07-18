@@ -188,7 +188,7 @@ class Form:
             try:
                 cleaned_values[name] = field.validate(self._values.get(name))
             except ValidationError as e:
-                errors.append((field, e))
+                errors.append(e)
         if errors:
             raise FormValidationError(errors)
         else:
@@ -374,13 +374,13 @@ class HTTPException(Exception):
 
 class ValidationError(Exception):
     def __init__(self, field, code, message):
-        super().__init__(message)
+        super().__init__('{}: {}'.format(field.name, message))
         self.field = field
         self.code = code
 
 
 class FormValidationError(Exception):
-    def __init__(self, errors: List[Tuple['FormField', ValidationError]]):
+    def __init__(self, errors: List[ValidationError]):
         self.errors = errors
 
 
@@ -389,11 +389,16 @@ class FormValidationError(Exception):
 class FormField(metaclass=abc.ABCMeta):
     _type_map = {}
 
-    def __init__(self, required, default, label, description):
+    def __init__(self, name, required, default, label, description):
+        self._name = name
         self._required = required
         self._default = default
         self._label = label
         self._description = description
+
+    @property
+    def name(self):
+        return self._name
 
     @property
     def required(self):
@@ -427,8 +432,8 @@ class FormField(metaclass=abc.ABCMeta):
 
 
 class IntegerField(FormField):
-    def __init__(self, required, default, label, description, min, max):
-        super().__init__(required, default, label, description)
+    def __init__(self, name, required, default, label, description, min, max):
+        super().__init__(name, required, default, label, description)
         self._min = min
         self._max = max
 
@@ -448,7 +453,7 @@ class IntegerField(FormField):
             else:
                 return None
         if not isinstance(value, int):
-            raise ValidationError(self, 'value', '"%s" is not an integer' % repr(value))
+            raise ValidationError(self, 'value', '%s is not an integer' % repr(value))
         if self.max is not None and value > self.max:
             raise ValidationError(self, 'max', 'Value is too large')
         if self.min is not None and value < self.min:
@@ -458,6 +463,7 @@ class IntegerField(FormField):
     @classmethod
     def from_json(cls, json_data):
         return IntegerField(
+            name=json_data['name'],
             required=json_data['required'],
             default=json_data['default'],
             label=json_data['label'],
@@ -468,15 +474,15 @@ class IntegerField(FormField):
 
     def __repr__(self):
         return (
-            "IntegerField(required={}, default={}, min={}, max={})"
-            .format(self.required, self.default, self.min, self.max)
+            "IntegerField(name={}, required={}, default={}, min={}, max={})"
+            .format(self.name, self.required, self.default, self.min, self.max)
         )
 
 
 class DecimalField(FormField):
-    def __init__(self, required, default, label, description,
+    def __init__(self, name, required, default, label, description,
                  min, min_exclusive, max, max_exclusive):
-        super().__init__(required, default, label, description)
+        super().__init__(name, required, default, label, description)
         self._min = min
         self._max = max
         self._min_exc = min_exclusive if min_exclusive is not None else False
@@ -506,7 +512,7 @@ class DecimalField(FormField):
             else:
                 return None
         if not isinstance(value, float):
-            raise ValidationError(self, 'value', '"%s" is not a float' % repr(value))
+            raise ValidationError(self, 'value', '%s is not a float' % repr(value))
         if self._max is not None:
             if not self._max_exc and value > self._max:
                 raise ValidationError(self, 'max', '%f > %f' % (value, self._max))
@@ -522,6 +528,7 @@ class DecimalField(FormField):
     @classmethod
     def from_json(cls, json_data):
         return DecimalField(
+            name=json_data['name'],
             required=json_data['required'],
             default=json_data['default'],
             label=json_data['label'],
@@ -534,15 +541,15 @@ class DecimalField(FormField):
 
     def __repr__(self):
         return (
-            "DecimalField(required={}, default={}, min={}, max={}, min_exc={}, max_exc={})"
-            .format(self.required, self.default, self.min, self.max,
+            "DecimalField(name={}, required={}, default={}, min={}, max={}, min_exc={}, max_exc={})"
+            .format(self.name, self.required, self.default, self.min, self.max,
                     self.min_exclusive, self.max_exclusive)
         )
 
 
 class TextField(FormField):
-    def __init__(self, required, default, label, description, min_length, max_length):
-        super().__init__(required, default, label, description)
+    def __init__(self, name, required, default, label, description, min_length, max_length):
+        super().__init__(name, required, default, label, description)
         self._min_length = min_length
         self._max_length = max_length
 
@@ -562,7 +569,7 @@ class TextField(FormField):
             else:
                 return None
         if not isinstance(value, str):
-            raise ValidationError(self, 'value', '"%s" is not a string' % repr(value))
+            raise ValidationError(self, 'value', '%s is not a string' % repr(value))
         if self._max_length is not None and len(value) > self._max_length:
             raise ValidationError(self, 'max_length', 'String is too long')
         if self._min_length is not None and len(value) < self._min_length:
@@ -572,6 +579,7 @@ class TextField(FormField):
     @classmethod
     def from_json(cls, json_data):
         return TextField(
+            name=json_data['name'],
             required=json_data['required'],
             default=json_data['default'],
             label=json_data['label'],
@@ -582,14 +590,14 @@ class TextField(FormField):
 
     def __repr__(self):
         return (
-            "TextField(required={}, default={}, min_length={}, max_length={}"
-            .format(self.required, self.default, self.min_length, self.max_length)
+            "TextField(name={}, required={}, default={}, min_length={}, max_length={})"
+            .format(self.name, self.required, self.default, self.min_length, self.max_length)
         )
 
 
 class BooleanField(FormField):
-    def __init__(self, required, default, label, description):
-        super().__init__(required, default, label, description)
+    def __init__(self, name, required, default, label, description):
+        super().__init__(name, required, default, label, description)
 
     def validate(self, value):
         value = self.default if value is None else value
@@ -599,12 +607,13 @@ class BooleanField(FormField):
             else:
                 return None
         if not isinstance(value, bool):
-            raise ValidationError(self, 'value', '"%s" is not a boolean' % repr(value))
+            raise ValidationError(self, 'value', '%s is not a boolean' % repr(value))
         return value
 
     @classmethod
     def from_json(cls, json_data):
         return BooleanField(
+            name=json_data['name'],
             required=json_data['required'],
             default=json_data['default'],
             label=json_data['label'],
@@ -613,14 +622,14 @@ class BooleanField(FormField):
 
     def __repr__(self):
         return (
-            "BooleanField(required={}, default={}"
-            .format(self.required, self.default)
+            "BooleanField(name={}, required={}, default={})"
+            .format(self.name, self.required, self.default)
         )
 
 
 class ChoiceField(FormField):
-    def __init__(self, required, default, label, description, choices):
-        super().__init__(required, default, label, description)
+    def __init__(self, name, required, default, label, description, choices):
+        super().__init__(name, required, default, label, description)
         self._choices = choices
 
     @property
@@ -640,6 +649,7 @@ class ChoiceField(FormField):
     @classmethod
     def from_json(cls, json_data):
         return ChoiceField(
+            name=json_data['name'],
             required=json_data['required'],
             default=json_data['default'],
             label=json_data['label'],
@@ -649,15 +659,15 @@ class ChoiceField(FormField):
 
     def __repr__(self):
         return (
-            "ChoiceField(required={}, default={}, choices={}"
-            .format(self.required, self.default, self.choices)
+            "ChoiceField(name={}, required={}, default={}, choices={})"
+            .format(self.name, self.required, self.default, self.choices)
         )
 
 
 class FileField(FormField):
-    def __init__(self, required, default, label, description,
+    def __init__(self, name, required, default, label, description,
                  mime_type, extension, max_size):
-        super().__init__(required, default, label, description)
+        super().__init__(name, required, default, label, description)
         self._mime_type = mime_type
         self._extension = extension
         self._max_size = max_size
@@ -688,6 +698,7 @@ class FileField(FormField):
     @classmethod
     def from_json(cls, json_data):
         return FileField(
+            name=json_data['name'],
             required=json_data['required'],
             default=json_data['default'],
             label=json_data['label'],
@@ -699,8 +710,8 @@ class FileField(FormField):
 
     def __repr__(self):
         return (
-            "FileField(required={}, default={}, mime_type={}"
-            .format(self.required, self.default, self.mime_type)
+            "FileField(name={}, required={}, default={}, mime_type={})"
+            .format(self.name, self.required, self.default, self.mime_type)
         )
 
 
