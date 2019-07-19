@@ -185,7 +185,8 @@ def service_submit(service, name, values):
 @click.option('--all', '-a', 'show_all', is_flag=True)
 @click.option('--name', '-n', 'task_name')
 @click.option('--uuid', '-u', 'task_uuid', type=click.UUID)
-def task(show_all, task_name, task_uuid):
+@click.option('--files', '-f', 'show_files', is_flag=True)
+def task(show_all, task_name, task_uuid, show_files):
     conf = ConfigLoader()
     try:
         cli = SlivkaClient(conf['host'], int(conf['port']))
@@ -193,26 +194,31 @@ def task(show_all, task_name, task_uuid):
         raise ClickException(
             "You must set \"{}\" in configuration.".format(e.args[0])
         )
+
+    def print_task(name, task):
+        status = task.get_status()
+        click.echo('{} [{}]: {}'.format(name, task.uuid, status.status))
+        if show_files:
+            for file in task.get_files():
+                click.echo(" + {file.title} [{file.uuid}]".format(file=file))
+
     if task_name:
         for name, uuid in conf.get_task_by_name(task_name):
             task = cli.get_task(uuid)
-            status = task.get_status()
-            click.echo('{} [{}]: {}'.format(name, uuid, status.status))
+            print_task(name, task)
     elif task_uuid:
         name, uuid = conf.get_task_by_uuid(task_uuid.hex)
         task = cli.get_task(uuid)
-        status = task.get_status()
-        click.echo('{} [{}]: {}'.format(name, uuid, status.status))
+        print_task(name, task)
     elif show_all:
         for name, uuid in conf.all_tasks():
             task = cli.get_task(uuid)
-            status = task.get_status()
-            click.echo('{} [{}]: {}'.format(name, uuid, status.status))
+            print_task(name, task)
 
 
 @click.command('file')
 @click.option('--uuid', '-u', type=click.UUID, required=True)
-@click.option('--output', '-o', type=click.File('wb', lazy=False))
+@click.option('--output', '-o', type=click.Path(dir_okay=False))
 def file(uuid, output):
     conf = ConfigLoader()
     try:
