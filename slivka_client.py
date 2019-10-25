@@ -30,7 +30,7 @@ class SlivkaClient:
 
     def get_services(self) -> List['Service']:
         if self._services is None:
-            response = _session.get(self.build_url('/services'))
+            response = _session.get(self.build_url('/api/services'))
             if response.status_code == 200:
                 self._services = [
                     Service(name=service['name'], path=service['URI'], client=self)
@@ -69,7 +69,7 @@ class SlivkaClient:
             raise HTTPException.from_response(response)
 
     def get_remote_file(self, file_id: str) -> 'RemoteFile':
-        response = _session.get(self.build_url('/files/%s' % file_id))
+        response = _session.get(self.build_url('/api/files/%s' % file_id))
         if response.status_code == 200:
             json_data = response.json()
             return RemoteFile(
@@ -83,7 +83,7 @@ class SlivkaClient:
             raise HTTPException.from_response(response)
 
     def get_task(self, uuid) -> 'Task':
-        url_path = '/tasks/%s' % uuid
+        url_path = '/api/tasks/%s' % uuid
         response = _session.get(self.build_url(url_path))
         if response.status_code == 200:
             return Task(uuid, url_path, self)
