@@ -1,11 +1,10 @@
 import asyncio
 import functools
-import math
 
 import ipywidgets
 from IPython.core.display import display, Markdown
 
-from slivka_client import *
+from . import *
 
 
 def display_form(form: Form):

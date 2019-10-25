@@ -6,7 +6,7 @@ from fnmatch import fnmatch
 import click
 from click import ClickException
 
-from slivka_client import SlivkaClient, IntegerField, DecimalField, BooleanField, FileField
+from . import SlivkaClient, IntegerField, DecimalField, BooleanField, FileField
 
 HOST = 'gjb-www-1.cluster.lifesci.dundee.ac.uk'
 PORT = 3203
