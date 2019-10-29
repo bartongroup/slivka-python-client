@@ -76,12 +76,11 @@ class ConfigLoader:
             ('untitled', uuid)
         )
 
-    def add_task(self, task, name):
+    def add_task(self, job_id, name):
         self._dirty = True
         self._json_data['tasks'].append({
             "name": name,
-            "uuid": task.uuid,
-            "url": str(task.url)
+            "uuid": job_id
         })
 
     def save(self):
@@ -145,8 +144,8 @@ def service_list(show_all, name, show_fields):
         click.echo(service.name)
         if show_fields:
             form = service.get_form()
-            for name, field in form.fields.items():
-                click.echo('{}: {}'.format(name, field))
+            for field in form.fields:
+                click.echo('{}: {}'.format(field.name, field))
 
 
 @click.command('submit')
@@ -165,7 +164,7 @@ def service_submit(service, name, values):
     form = service.get_form()
     for arg in values:
         k, v = arg.split('=', 1)
-        field = form.fields.get(k)
+        field = form[k]
         if isinstance(field, IntegerField):
             v = int(v)
         elif isinstance(field, DecimalField):
@@ -175,10 +174,10 @@ def service_submit(service, name, values):
         elif isinstance(field, FileField):
             v = cli.get_remote_file(v)
         form.insert({k: v})
-    task = form.submit()
-    conf.add_task(task, name )
+    job_id = form.submit()
+    conf.add_task(job_id, name)
     conf.save()
-    click.echo('Task {} submitted successfully.'.format(task.uuid))
+    click.echo('Task {} submitted successfully.'.format(job_id))
 
 
 @click.command('task')
@@ -195,25 +194,22 @@ def task(show_all, task_name, task_uuid, show_files):
             "You must set \"{}\" in configuration.".format(e.args[0])
         )
 
-    def print_task(name, task):
-        status = task.get_status()
-        click.echo('{} [{}]: {}'.format(name, task.uuid, status.status))
+    def print_task(name, job_id):
+        state = cli.get_job_state(job_id)
+        click.echo('{} [{}]: {}'.format(name, job_id, state.name))
         if show_files:
-            for file in task.get_files():
+            for file in cli.get_job_results(job_id):
                 click.echo(" + {file.title} [{file.uuid}]".format(file=file))
 
     if task_name:
-        for name, uuid in conf.get_task_by_name(task_name):
-            task = cli.get_task(uuid)
-            print_task(name, task)
+        for name, job_id in conf.get_task_by_name(task_name):
+            print_task(name, job_id)
     elif task_uuid:
-        name, uuid = conf.get_task_by_uuid(task_uuid.hex)
-        task = cli.get_task(uuid)
-        print_task(name, task)
+        name, job_id = conf.get_task_by_uuid(task_uuid.hex)
+        print_task(name, job_id)
     elif show_all:
-        for name, uuid in conf.all_tasks():
-            task = cli.get_task(uuid)
-            print_task(name, task)
+        for name, job_id in conf.all_tasks():
+            print_task(name, job_id)
 
 
 @click.command('file')

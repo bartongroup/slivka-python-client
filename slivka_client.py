@@ -161,6 +161,12 @@ class Form:
     def fields(self) -> ValuesView['FormField']:
         return self._fields.values()
 
+    def __iter__(self):
+        return iter(self.fields)
+
+    def __getitem__(self, item):
+        return self._fields[item]
+
     @classmethod
     def from_json(cls: Type['Form'], json_data: dict, client: SlivkaClient) -> 'Form':
         return cls(
