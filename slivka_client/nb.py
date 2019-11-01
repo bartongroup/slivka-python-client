@@ -1,5 +1,5 @@
 import asyncio
-import functools
+from collections import OrderedDict
 
 import ipywidgets
 from IPython.core.display import display, Markdown
@@ -7,14 +7,74 @@ from IPython.core.display import display, Markdown
 from . import *
 
 
-def display_form(form: Form):
-    widgets = [_widget_factory(field) for field in form]
-    box = ipywidgets.VBox(widgets)
-    box.layout.border = '1px solid black'
-    box.layout.padding = '5px'
-    submit = ipywidgets.Button(description='Submit')
-    submit.on_click(functools.partial(submit_event_handler, form, widgets))
-    display(box, submit)
+class NotebookForm:
+    def __init__(self, form):
+        self.form = form
+        self.client = form._client
+        self.widgets = list(map(_widget_factory, form))
+        self._widget_box = ipywidgets.VBox(self.widgets)
+        self._widget_box.layout.border = '1px solid black'
+        self._submit = ipywidgets.Button(description='Submit')
+        self._submit.on_click(self.on_submit)
+        self.jobs = OrderedDict()
+
+    def _ipython_display_(self):
+        self.display()
+
+    def display(self):
+        display(self._widget_box, self._submit)
+
+    def on_submit(self, button):
+        self._submit.disabled = True
+        self.form.reset()
+        try:
+            for widget in self.widgets:
+                value = widget.value
+                field = self.form[widget.field_name]
+                if isinstance(field, FileField):
+                    try:
+                        name, data = next(iter(value.items()))
+                    except StopIteration:
+                        value = None
+                    else:
+                        value = self.client.upload_file(
+                            io.BytesIO(data['content']),
+                            name,
+                            field.media_type or 'text/plain'
+                        )
+                self.form.insert({field.name: value})
+            cleaned_data = self.form.validate()
+            job_id = self.form.submit()
+        except FormValidationError:
+            raise
+        else:
+            self.jobs[job_id] = {
+                'inputs': cleaned_data,
+                'state': JobState.PENDING,
+                'id': job_id,
+                'results': []
+            }
+            display(Markdown(f'job *{job_id}* submitted successfully.'))
+            asyncio.create_task(self.monitor_job_state(job_id))
+        finally:
+            self._submit.disabled = False
+
+    async def monitor_job_state(self, job_id):
+        job = self.jobs[job_id]
+        job['state'] = self.client.get_job_state(job_id)
+        while job['state'] in (JobState.QUEUED, JobState.PENDING, JobState.RUNNING):
+            await asyncio.sleep(1)
+            job['state'] = self.client.get_job_state(job_id)
+        job['results'] = self.client.get_job_results(job_id)
+        display(Markdown(f'Job *{job_id}* finished with state {job["state"].name}.'))
+
+    @property
+    def job(self):
+        return next(reversed(self.jobs.values()), None)
+
+    @property
+    def all_jobs(self):
+        return self.jobs.values()
 
 
 def _widget_factory(field: FormField):
@@ -63,40 +123,3 @@ def _widget_factory(field: FormField):
         raise TypeError(type(field))
     widget.field_name = field.name
     return widget
-
-
-def submit_event_handler(form, widgets, button):
-    button.disabled = True
-    form.reset()
-    try:
-        for widget in widgets:
-            value = widget.value
-            field = form[widget.field_name]
-            if isinstance(field, FileField):
-                name, data = next(iter(value.items()))
-                content = io.BytesIO(data['content'])
-                value = form._client.upload_file(
-                    content, name, field.media_type or 'text/plain'
-                )
-            form.insert({field.name: value})
-        job_id = form.submit()
-    except FormValidationError:
-        button.disabled = False
-        raise
-    else:
-        display('job {} submitted successfully'.format(job_id))
-        task = asyncio.create_task(wait_for_result(form._client, job_id))
-        def enable_button(_): button.disabled = False
-        task.add_done_callback(enable_button)
-
-
-async def wait_for_result(cli, job_id):
-    status = JobState.QUEUED
-    while status in (JobState.QUEUED, JobState.PENDING, JobState.RUNNING):
-        await asyncio.sleep(1)
-        status = cli.get_job_state(job_id)
-    files = cli.get_job_results(job_id)
-    lines = ['Output: \n']
-    for file in files:
-        lines.append('- [%s](%s)' % (file.label, file.url))
-    display(Markdown(str.join('\n', lines)))
