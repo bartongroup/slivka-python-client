@@ -62,7 +62,7 @@ class NotebookForm:
     async def monitor_job_state(self, job_id):
         job = self.jobs[job_id]
         job['state'] = self.client.get_job_state(job_id)
-        while job['state'] in (JobState.QUEUED, JobState.PENDING, JobState.RUNNING):
+        while not job['state'].is_finished():
             await asyncio.sleep(1)
             job['state'] = self.client.get_job_state(job_id)
         job['results'] = self.client.get_job_results(job_id)
