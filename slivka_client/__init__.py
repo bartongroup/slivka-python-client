@@ -399,11 +399,15 @@ class FormField(metaclass=abc.ABCMeta):
         }
         if field_type == FieldType.INTEGER:
             return IntegerField(
-                **kwargs, min=json_obj['min'], max=json_obj['max']
+                **kwargs,
+                min=json_obj.get('min'),
+                max=json_obj.get('max')
             )
         elif field_type == FieldType.DECIMAL:
             return DecimalField(
-                **kwargs, min=json_obj['min'], max=json_obj['max'],
+                **kwargs,
+                min=json_obj.get('min'),
+                max=json_obj.get('max'),
                 min_exclusive=json_obj.get('minExclusive', False),
                 max_exclusive=json_obj.get('maxExclusive', False)
             )
