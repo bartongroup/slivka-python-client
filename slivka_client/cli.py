@@ -5,6 +5,7 @@ from fnmatch import fnmatch
 
 import click
 from click import ClickException
+from urllib3.util import Url
 
 from . import SlivkaClient, IntegerField, DecimalField, BooleanField, FileField
 
@@ -131,7 +132,7 @@ def service():
 def service_list(show_all, name, show_fields):
     conf = ConfigLoader()
     try:
-        cli = SlivkaClient(conf['host'], int(conf['port']))
+        cli = SlivkaClient(Url(host=conf['host'], port=int(conf['port'])))
     except KeyError as e:
         raise ClickException(
             "You must set \"{}\" in configuration.".format(e.args[0])
@@ -155,7 +156,7 @@ def service_list(show_all, name, show_fields):
 def service_submit(service, name, values):
     conf = ConfigLoader()
     try:
-        cli = SlivkaClient(conf['host'], int(conf['port']))
+        cli = SlivkaClient(Url(host=conf['host'], port=int(conf['port'])))
     except KeyError as e:
         raise ClickException(
             "You must set \"{}\" in configuration.".format(e.args[0])
@@ -188,7 +189,7 @@ def service_submit(service, name, values):
 def task(show_all, task_name, task_uuid, show_files):
     conf = ConfigLoader()
     try:
-        cli = SlivkaClient(conf['host'], int(conf['port']))
+        cli = SlivkaClient(Url(host=conf['host'], port=int(conf['port'])))
     except KeyError as e:
         raise ClickException(
             "You must set \"{}\" in configuration.".format(e.args[0])
@@ -218,7 +219,7 @@ def task(show_all, task_name, task_uuid, show_files):
 def file(uuid, output):
     conf = ConfigLoader()
     try:
-        cli = SlivkaClient(conf['host'], int(conf['port']))
+        cli = SlivkaClient(Url(conf['host'], int(conf['port'])))
     except KeyError as e:
         raise ClickException(
             "You must set \"{}\" in configuration.".format(e.args[0])

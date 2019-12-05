@@ -6,21 +6,31 @@ from collections import defaultdict
 from typing import *
 
 import requests
-from urllib3.util import Url
+from urllib3.util import Url, parse_url
 
 _session = requests.Session()
 
 
 class SlivkaClient:
-    def __init__(self, host: str, port: int = 8000):
-        self._url = Url(scheme='http', host=host, port=port)
+    def __init__(self, url: Url):
+        self._url = url
         self._services = None
+
+    @classmethod
+    def from_str_url(cls, url: str):
+        return cls(parse_url(url))
+
+    @classmethod
+    def from_url_params(cls, **kwargs):
+        return cls(Url(**kwargs))
 
     @property
     def url(self) -> Url:
         return self._url
 
     def build_url(self, path) -> Url:
+        if not path.startswith('/'):
+            path = self._url.path + '/' + path
         return Url(
             scheme=self._url.scheme,
             host=self._url.host,
@@ -30,7 +40,7 @@ class SlivkaClient:
 
     def get_services(self) -> List['Service']:
         if self._services is None:
-            response = _session.get(self.build_url('/api/services'))
+            response = _session.get(self.build_url('api/services'))
             if response.status_code == 200:
                 self._services = [
                     Service(
@@ -59,7 +69,7 @@ class SlivkaClient:
         elif not isinstance(file, io.BufferedIOBase):
             raise TypeError('"%s" is not valid path or stream' % repr(type(file)))
         response = _session.post(
-            url=self.build_url('/api/files'),
+            url=self.build_url('api/files'),
             files={'file': (title, file, mime_type)}
         )
         if response.status_code == 201:
@@ -68,14 +78,14 @@ class SlivkaClient:
             raise HTTPException.from_response(response)
 
     def get_remote_file(self, file_id: str) -> 'RemoteFile':
-        response = _session.get(self.build_url('/api/files/%s' % file_id))
+        response = _session.get(self.build_url('api/files/%s' % file_id))
         if response.status_code == 200:
             return RemoteFile.new_from_json(response.json(), self)
         else:
             raise HTTPException.from_response(response)
 
     def get_job_state(self, uuid: str) -> 'JobState':
-        url = self.build_url('/api/tasks/%s' % uuid)
+        url = self.build_url('api/tasks/%s' % uuid)
         response = _session.get(url)
         if response.status_code == 200:
             return JobState[response.json()['status'].upper()]
@@ -83,7 +93,7 @@ class SlivkaClient:
             raise HTTPException.from_response(response)
 
     def get_job_results(self, uuid: str) -> List['RemoteFile']:
-        url = self.build_url('/api/tasks/%s/files' % uuid)
+        url = self.build_url('api/tasks/%s/files' % uuid)
         response = _session.get(url)
         if response.status_code == 200:
             return [RemoteFile.new_from_json(obj, self)
