@@ -226,7 +226,7 @@ class Form:
                 if len(values) == 0:
                     field.validate(None)
                 cleaned_values[name] = [
-                    field.validate(val) for val in self._values[name]
+                    field.validate(val) for val in values
                 ]
             except ValidationError as e:
                 errors.append(e)
@@ -434,7 +434,8 @@ class FormField(metaclass=abc.ABCMeta):
         elif field_type == FieldType.FILE:
             return FileField(
                 **kwargs,
-                media_type=json_obj.get('mimetype'),
+                media_type=json_obj.get('mediaType'),
+                media_type_parameters=json_obj.get('mediaTypeParameters', {}),
                 extension=json_obj.get('extension'),
                 max_size=json_obj.get('maxSize')
             )
@@ -626,9 +627,10 @@ class ChoiceField(FormField):
 class FileField(FormField):
     type = FieldType.FILE
 
-    def __init__(self, *, media_type, extension, max_size, **kwargs):
+    def __init__(self, *, media_type, media_type_parameters, extension, max_size, **kwargs):
         super().__init__(**kwargs)
         self._media_type = media_type
+        self._media_type_parameters = media_type_parameters
         self._extension = extension
         self._max_size = max_size
 
@@ -643,6 +645,10 @@ class FileField(FormField):
     @property
     def media_type(self):
         return self._media_type
+
+    @property
+    def media_type_parameters(self):
+        return self._media_type_parameters
 
     def validate(self, value):
         value = self.default if value is None else value
