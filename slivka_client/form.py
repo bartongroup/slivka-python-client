@@ -210,18 +210,13 @@ def _build_field(data_dict):
         'description': data_dict.get('description', ''),
         'multiple': data_dict.get('multiple', False)
     }
-    if field_type == FieldType.UNDEFINED:
-        return UndefinedField(
-            **kwargs,
-            raw=data_dict
-        )
     if field_type == FieldType.INTEGER:
         return IntegerField(
             **kwargs,
             min=data_dict.get('min'),
             max=data_dict.get('max')
         )
-    if field_type == FieldType.DECIMAL:
+    elif field_type == FieldType.DECIMAL:
         return DecimalField(
             **kwargs,
             min=data_dict.get('min'),
@@ -229,21 +224,26 @@ def _build_field(data_dict):
             min_exclusive=data_dict.get('minExclusive', False),
             max_exclusive=data_dict.get('maxExclusive', False)
         )
-    if field_type == FieldType.TEXT:
+    elif field_type == FieldType.TEXT:
         return TextField(
             **kwargs,
             min_length=data_dict.get('minLength'),
             max_length=data_dict.get('maxLength')
         )
-    if field_type == FieldType.BOOLEAN:
+    elif field_type == FieldType.BOOLEAN:
         return BooleanField(**kwargs)
-    if field_type == FieldType.CHOICE:
+    elif field_type == FieldType.CHOICE:
         return ChoiceField(
             **kwargs, choices=data_dict['choices']
         )
-    if field_type == FieldType.FILE:
+    elif field_type == FieldType.FILE:
         return FileField(
             **kwargs,
             media_type=data_dict.get('mediaType'),
             media_type_parameters=data_dict.get('mediaTypeParameters', {})
+        )
+    else:
+        return UndefinedField(
+            **kwargs,
+            attributes=data_dict
         )
