@@ -3,13 +3,13 @@ import io
 import requests
 
 
-class File:
-    def __init__(self,
-                 uuid: str,
-                 title: str,
-                 label: str,
-                 media_type: str,
-                 url: str):
+class File(str):
+    def __new__(cls, uuid, *args, **kwargs):
+        return super().__new__(cls, uuid)
+
+    def __init__(self, uuid: str, title: str,
+                 label: str, media_type: str, url: str):
+        super().__init__()
         self._uuid = uuid
         self._title = title
         self._label = label
@@ -32,9 +32,6 @@ class File:
             fp.write(response.text)
         else:
             fp.write(response.content)
-
-    def __str__(self):
-        return self._uuid
 
     def __repr__(self):
         return 'File(%s [%s])' % (self._label, self._uuid)
