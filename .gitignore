@@ -1,4 +1,6 @@
 venv/
 .idea/
+build/
+dist/
 **/*.py[co]
 *.egg-info/
