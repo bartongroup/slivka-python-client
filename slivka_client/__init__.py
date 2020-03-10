@@ -1,6 +1,6 @@
 from .client import SlivkaClient
 from .file import File
-from .form import Form
+from .form import Form, FieldType
 from .service import Service
 from .state import JobState
 
