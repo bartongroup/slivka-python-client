@@ -21,6 +21,7 @@ class Form:
     name = property(lambda self: self._name)
     url = property(lambda self: self._url)
     fields = property(lambda self: self._fields.values())
+    values = property(lambda self: self._values)
 
     def __iter__(self) -> Iterator['_BaseField']:
         return iter(self.fields)
@@ -37,9 +38,8 @@ class Form:
     def copy(self) -> 'Form':
         return Form(self.name, self.fields, self.url)
 
-    def reset(self):
-        for _list in self._values.values():
-            _list.clear()
+    def clear(self):
+        self._values.clear()
 
     def set(self, key, value):
         if key not in self._fields.keys():
