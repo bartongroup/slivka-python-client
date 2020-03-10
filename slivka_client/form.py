@@ -99,60 +99,97 @@ class FieldType(enum.Enum):
 
 @attr.s(slots=True, frozen=True)
 class _BaseField:
+    """
+    The base for other fields.
+    This class is never instantiated directly but provides common
+    attributes for deriving types.
+    """
     type = attr.ib(type=FieldType, repr=False)
-    name = attr.ib(type=bool)
+    "field type"
+    name = attr.ib(type=str)
+    "field name/identifier"
     label = attr.ib(type=str, default="")
+    "short human-readable label"
     description = attr.ib(type=str, default="")
+    "longer description"
     required = attr.ib(type=bool, default=True)
+    "whether the field is required"
     default = attr.ib(default=None)
+    "default value"
     multiple = attr.ib(type=bool, default=False)
+    "whether multiple values are allowed"
 
 
 @attr.s(slots=True, frozen=True)
 class UndefinedField(_BaseField):
+    """
+    Class for all custom or unrecognised fields.
+    """
     type = attr.ib(default=FieldType.UNDEFINED, init=False, repr=False)
-    raw = attr.ib(type=dict, factory=dict)
+    ":value: FieldType.UNDEFINED"
+    attributes = attr.ib(type=dict, factory=dict)
+    "dictionary of field parameters as provided by the server"
+
+    def __getitem__(self, key):
+        return self.attributes[key]
 
 
 @attr.s(slots=True, frozen=True)
 class IntegerField(_BaseField):
     type = attr.ib(default=FieldType.INTEGER, init=False, repr=False)
+    ":value: FieldType.INTEGER"
     min = attr.ib(type=int, default=None)
+    "minimum value constraint"
     max = attr.ib(type=int, default=None)
+    "maximum value constraint"
 
 
 @attr.s(slots=True, frozen=True)
 class DecimalField(_BaseField):
     type = attr.ib(default=FieldType.DECIMAL, init=False, repr=False)
+    ":value: FieldType.DECIMAL"
     min = attr.ib(type=float, default=None)
+    "minimum value constraint"
     max = attr.ib(type=float, default=None)
+    "maximum value constraint"
     min_exclusive = attr.ib(type=bool, default=False)
+    "whether the minimum value is excluded"
     max_exclusive = attr.ib(type=bool, default=False)
+    "whether the maximum value is excluded"
 
 
 @attr.s(slots=True, frozen=True)
 class TextField(_BaseField):
     type = attr.ib(default=FieldType.TEXT, init=False, repr=False)
+    ":value: FieldType.TEXT"
     min_length = attr.ib(type=int, default=None)
+    "minimum length of the text"
     max_length = attr.ib(type=int, default=None)
+    "maximum length of the text"
 
 
 @attr.s(slots=True, frozen=True)
 class BooleanField(_BaseField):
     type = attr.ib(default=FieldType.BOOLEAN, init=False, repr=False)
+    ":value: FieldType.BOOLEAN"
 
 
 @attr.s(slots=True, frozen=True)
 class ChoiceField(_BaseField):
     type = attr.ib(default=FieldType.CHOICE, init=False, repr=False)
+    ":value: FieldType.CHOICE"
     choices = attr.ib(type=list, default=())
+    "list of available choices"
 
 
 @attr.s(slots=True, frozen=True)
 class FileField(_BaseField):
     type = attr.ib(default=FieldType.FILE, init=False, repr=False)
+    ":value: FieldType.FILE"
     media_type = attr.ib(type=str, default=None)
+    "media type of the file"
     media_type_parameters = attr.ib(type=dict, factory=dict)
+    "additional annotations regarding file content"
 
 
 def _build_form(data_dict, url_factory) -> 'Form':
