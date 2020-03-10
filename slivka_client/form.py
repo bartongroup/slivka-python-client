@@ -1,6 +1,6 @@
 import enum
 import io
-from collections import defaultdict
+from collections import defaultdict, namedtuple
 from typing import Iterable, Iterator
 
 import attr
@@ -56,20 +56,32 @@ class Form:
             raise KeyError(key)
         self._values[key].extend(iterable)
 
-    def submit(self, items, **kwargs) -> str:
+    def submit(self, _items=(), **kwargs) -> str:
         data = self._values.copy()
-        data.update(items)
+        data.update(_items)
         data.update(kwargs)
         files = {}
         for key, val in data.items():
             if isinstance(val, io.IOBase):
                 files[key] = data.pop(key)
         response = requests.post(self._url, data=data, files=files)
+        if response.status_code == 420:
+            errors = [FieldError(**kw) for kw in response.json()['errors']]
+            raise ValidationError(errors)
         response.raise_for_status()
         return response.json()['uuid']
 
     def __repr__(self):
         return 'Form(%s)' % self.name
+
+
+FieldError = namedtuple('FieldError', ('message', 'field', 'errorCode'))
+
+
+class ValidationError(Exception):
+    def __init__(self, errors):
+        Exception.__init__(self, str.join(', ', map(str, errors)))
+        self.field_errors = errors
 
 
 class FieldType(enum.Enum):
