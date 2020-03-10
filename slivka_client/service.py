@@ -1,4 +1,4 @@
-from typing import Callable, Collection
+from typing import Callable, Sequence
 
 import requests
 
@@ -8,7 +8,7 @@ from .form import Form, _build_form
 class Service:
     def __init__(self,
                  name: str, label: str, path: str,
-                 classifiers: Collection[str],
+                 classifiers: Sequence[str],
                  url_factory: Callable[[str], str]):
         self._name = name
         self._label = label
