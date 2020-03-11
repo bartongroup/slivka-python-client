@@ -8,6 +8,9 @@ import requests
 
 
 class Form:
+    """
+    Representation of a new job submission request form.
+    """
     def __init__(self,
                  name: str,
                  fields: Iterable['_BaseField'],
@@ -19,44 +22,66 @@ class Form:
         self._values = defaultdict(list)
 
     name = property(lambda self: self._name)
+    "Name of the form."
     url = property(lambda self: self._url)
+    "Url location of the form."
     fields = property(lambda self: self._fields.values())
+    "View of all fields in this form."
     values = property(lambda self: self._values)
+    "Dictionary of entered values."
 
     def __iter__(self) -> Iterator['_BaseField']:
+        """Return an iterator over all form fields."""
         return iter(self.fields)
 
-    def __getitem__(self, key):
+    def __getitem__(self, key) -> '_BaseField':
+        """Return the description of the field named *key*."""
         return self._fields[key]
 
     def __setitem__(self, key, value):
+        """Set the value of the field *key* to *value*."""
         self.set(key, value)
 
     def __delitem__(self, key):
+        """Clear the field specified by *key*."""
         del self._values[key]
 
     def copy(self) -> 'Form':
+        """Create and return an empty copy of that form."""
         return Form(self.name, self.fields, self.url)
 
     def clear(self):
+        """Erase all values from this form"""
         self._values.clear()
 
     def set(self, key, value):
+        """Set the value of the field *key* to *value*."""
         if key not in self._fields.keys():
             raise KeyError(key)
         self._values[key] = value
 
     def append(self, key, value):
+        """Append *value* to the list of values of *key* field."""
         if key not in self._fields.keys():
             raise KeyError(key)
         self._values[key].append(value)
 
     def extend(self, key, iterable):
+        """Append all values from the *iterable* to the field values."""
         if key not in self._fields.keys():
             raise KeyError(key)
         self._values[key].extend(iterable)
 
     def submit(self, _items=(), **kwargs) -> str:
+        """
+        Submit the form to the server and start a new job. You can
+        provide an optional dictionary of input parameters that will
+        be used in this submission only or pass them as keyword arguments.
+
+        :param _items: dict of submission parameters
+        :param kwargs: submission parameters as kwargs
+        :return: job uuid
+        """
         data = self._values.copy()
         data.update(_items)
         data.update(kwargs)
@@ -88,10 +113,13 @@ class FieldType(enum.Enum):
     UNDEFINED = 'undefined'
     INTEGER = 'integer'
     INT = 'integer'
+    "Alias of :attr:`.FieldType.INTEGER`"
     DECIMAL = 'decimal'
     FLOAT = 'decimal'
+    "Alias of :attr:`.FieldType.DECIMAL`"
     BOOLEAN = 'boolean'
     FLAG = 'boolean'
+    "Alias of :attr:`.FieldType.BOOLEAN`"
     TEXT = 'text'
     FILE = 'file'
     CHOICE = 'choice'
