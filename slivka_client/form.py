@@ -86,7 +86,7 @@ class Form:
         data.update(_items)
         data.update(kwargs)
         files = {}
-        for key, val in data.items():
+        for key, val in list(data.items()):
             if isinstance(val, io.IOBase):
                 files[key] = data.pop(key)
         response = requests.post(self._url, data=data, files=files)
