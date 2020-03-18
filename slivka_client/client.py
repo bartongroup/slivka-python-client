@@ -69,7 +69,16 @@ class SlivkaClient:
         if self._services is None:
             self.refresh_services()
         return self._services
+
     services = property(get_services)
+
+    def get_service(self, name):
+        try:
+            return next(s for s in self.services if s.name == name)
+        except StopIteration:
+            raise KeyError(name)
+
+    __getitem__ = get_service
 
     def refresh_services(self):
         """Force reloading the services list from the server."""
