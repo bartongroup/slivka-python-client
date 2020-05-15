@@ -6,6 +6,10 @@ from .form import Form, _build_form
 
 
 class Service:
+    """
+    A class representing one of the services on the server.
+    """
+
     def __init__(self,
                  name: str, label: str, path: str,
                  classifiers: Sequence[str],
