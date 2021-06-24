@@ -5,3 +5,4 @@ from .service import Service
 from .state import JobState
 
 __all__ = ('SlivkaClient', 'File', 'Form', 'Service', 'JobState')
+__version__ = '1.2'
