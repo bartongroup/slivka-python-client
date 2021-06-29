@@ -10,7 +10,7 @@ from .client import SlivkaClient
 
 
 @click.group()
-@click.version_option("1.1", prog_name='slivka-cli')
+@click.version_option("1.2", prog_name='slivka-cli')
 @click.option("--host", metavar="URL", help="Slivka server url.",
               default="https://www.compbio.dundee.ac.uk/slivka/")
 @click.pass_context
@@ -64,14 +64,15 @@ def _print_service(service, terse=False):
 def submit(obj, service, values, terse):
     client: SlivkaClient = obj['client']
     service: Service = client.get_service(service)
-    form = service.new_form()
+    data = []
+    files = []
     for arg in values:
         k, v = arg.split('=', 1)
         if v.startswith('@'):
-            form.set(k, open(v[1:], 'rb'))
+            files.append((k, open(v[1:], 'rb')))
         else:
-            form.append(k, v)
-    jid = form.submit()
+            data.append((k, v))
+    jid = service.submit_job(data, files)
     if terse:
         click.echo(jid)
     else:
@@ -84,11 +85,11 @@ def submit(obj, service, values, terse):
 @click.pass_obj
 def status(obj, job_id, terse):
     client: SlivkaClient = obj['client']
-    job_status = client.get_job_state(job_id)
+    job = client.get_job(job_id)
     if terse:
-        click.echo(job_status.name)
+        click.echo(job.status)
     else:
-        click.echo(f"The job status is: {job_status.name}")
+        click.echo(f"The job status is: {job.status}")
 
 
 @main.command()
@@ -103,13 +104,16 @@ def status(obj, job_id, terse):
 @click.pass_obj
 def files(obj, job_id, download, directory, overwrite):
     client: SlivkaClient = obj['client']
-    for file in client.get_job_results(job_id):
-        click.echo(f"{file.uuid}: {file.label}; "
+    job = client.get_job(job_id)
+    for file in job.files:
+        click.echo(f"{file.id}: {file.label}; "
                    f"content-type={file.media_type}")
         if download:
             if not os.path.exists(directory):
                 os.makedirs(directory)
-            fp = os.path.join(directory, file.title)
+            fp = os.path.join(directory, file.path)
+            if os.path.dirname(file.path):
+                os.makedirs(os.path.dirname(fp), exist_ok=True)
             if os.path.exists(fp):
                 if overwrite == "prompt":
                     if not click.confirm(f"File {fp} exists. Overwrite?"):
