@@ -1,8 +1,7 @@
 from .client import SlivkaClient
 from .file import File
-from .form import Form, FieldType
 from .service import Service
-from .state import JobState
+from .job import Job
 
-__all__ = ('SlivkaClient', 'File', 'Form', 'Service', 'JobState')
+__all__ = ('SlivkaClient', 'File', 'Service', 'Job')
 __version__ = '1.2'

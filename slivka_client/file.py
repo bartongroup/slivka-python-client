@@ -1,47 +1,45 @@
 import io
+import os
+from urllib.parse import urljoin
 
+import attr
 import requests
 
 
+@attr.s()
 class File(str):
-    def __new__(cls, uuid, *args, **kwargs):
-        return super().__new__(cls, uuid)
+    def __new__(cls, *args, **kwargs):
+        # grab id from the third position or 'id' kwarg
+        val = args[2] if len(args) >= 3 else kwargs['id']
+        return super().__new__(cls, val)
 
-    def __init__(self, uuid: str, title: str,
-                 label: str, media_type: str, url: str):
-        super().__init__()
-        self._uuid = uuid
-        self._title = title
-        self._label = label
-        self._media_type = media_type
-        self._content_url = url
-
-    uuid = property(lambda self: self._uuid)
-    title = property(lambda self: self._title)
-    label = property(lambda self: self._label)
-    media_type = property(lambda self: self._media_type)
-    url = property(lambda self: self._content_url)
+    url: str = attr.ib(repr=False)
+    content_url: str = attr.ib(repr=False)
+    id: str = attr.ib()
+    job_id: str = attr.ib(repr=False)
+    path: str = attr.ib(repr=False)
+    label: str = attr.ib()
+    media_type: str = attr.ib(repr=False)
 
     def dump(self, fp):
-        response = requests.get(self._content_url)
+        response = requests.get(self.content_url)
         response.raise_for_status()
-        if isinstance(fp, str):
-            with open(fp, 'wb') as f:
-                f.write(response.content)
-        elif isinstance(fp, io.TextIOBase):
+        if isinstance(fp, io.TextIOBase):
             fp.write(response.text)
-        else:
+        elif isinstance(fp, io.IOBase):
             fp.write(response.content)
+        else:
+            with open(os.fspath(fp), 'wb') as f:
+                f.write(response.content)
 
-    def __repr__(self):
-        return 'File(%s [%s])' % (self._label, self._uuid)
-
-
-def _build_file(data_dict, url_factory):
-    return File(
-        uuid=data_dict['uuid'],
-        title=data_dict.get('title', ''),
-        label=data_dict.get('label', ''),
-        media_type=data_dict.get('mimetype', ''),
-        url=url_factory(data_dict['contentURI'])
-    )
+    @staticmethod
+    def from_response(host, response):
+        return File(
+            url=urljoin(host, response['@url']),
+            content_url=urljoin(host, response['@content']),
+            id=response['id'],
+            job_id=response['jobId'],
+            path=response['path'],
+            label=response['label'],
+            media_type=response['mediaType']
+        )

@@ -19,10 +19,9 @@ setup(
     version=get_version('slivka_client/__init__.py'),
     packages=['slivka_client'],
     install_requires=[
-        'requests>=2.13.0',
-        'urllib3>=1.12',
         'attrs>=19.0',
-        'click>=7.1.2'
+        'click>=7.1.2',
+        'requests>=2.13.0'
     ],
     entry_points={
         'console_scripts': [
