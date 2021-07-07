@@ -39,7 +39,7 @@ class Service:
 
     def submit_job(self, data=None, files=None):
         response = requests.post(self.url + '/jobs', data=data, files=files)
-        if response.status_code == 400:
+        if response.status_code == 422:
             response = response.json()
             raise SubmissionError([
                 ParameterValueError(e['parameter'], e['message'], e['errorCode'])
