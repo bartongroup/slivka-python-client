@@ -37,16 +37,16 @@ def _print_service(service, terse=False):
     if terse:
         click.echo(service.name)
     else:
-        click.echo(f"{service.name}: {service.label}")
+        click.echo(f"{service.id}: {service.name}")
         click.echo("classifiers:")
         text = textwrap.indent('\n'.join(service.classifiers), ' - ')
         click.echo(text)
         click.echo("fields:")
         lines = []
-        for field in service.form:
-            attrs = attr.asdict(field, filter=lambda _, val: val is not None,
+        for param in service.parameters:
+            attrs = attr.asdict(param, filter=lambda _, val: val is not None,
                                 dict_factory=collections.OrderedDict)
-            line = f"{attrs.pop('name')}: {attrs.pop('type').value}; "
+            line = f"{attrs.pop('name')}: {attrs.pop('type')}; "
             line += ", ".join(
                 f"{key.replace('_', '-')}={val}"
                 for key, val in attrs.items()
