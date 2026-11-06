@@ -1,0 +1,11 @@
+[project]
+name = "slivka-client"
+version = "1.2.1b2"
+description = "A Python client for Slivka services"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "attr>=0.3.2",
+    "attrs>=25.4.0",
+    "requests>=2.32.5",
+]
