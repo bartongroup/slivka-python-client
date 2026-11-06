@@ -1,7 +1,7 @@
 [project]
-name = "slivka-python-client"
-version = "0.1.0"
-description = "Add your description here"
+name = "slivka-client"
+version = "1.2.1b2"
+description = "A Python client for Slivka services"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
